@@ -3,17 +3,15 @@ import { URI } from "vs/base/common/uri";
 import { registerSingleton } from "vs/platform/instantiation/common/extensions";
 import { ServiceCollection } from "vs/platform/instantiation/common/serviceCollection";
 import { ILocalizationsService } from "vs/platform/localizations/common/localizations";
-import { LocalizationsService } from "vs/platform/localizations/electron-browser/localizationsService";
+import { LocalizationsService } from "vs/workbench/services/localizations/electron-browser/localizationsService";
 import { ITelemetryService } from "vs/platform/telemetry/common/telemetry";
-import { IUpdateService } from "vs/platform/update/common/update";
-import { UpdateService } from "vs/platform/update/electron-browser/updateService";
 import { coderApi, vscodeApi } from "vs/server/src/browser/api";
 import { IUploadService, UploadService } from "vs/server/src/browser/upload";
 import { INodeProxyService, NodeProxyChannelClient } from "vs/server/src/common/nodeProxy";
 import { TelemetryChannelClient } from "vs/server/src/common/telemetry";
 import "vs/workbench/contrib/localizations/browser/localizations.contribution";
-import "vs/workbench/contrib/update/electron-browser/update.contribution";
 import { IRemoteAgentService } from "vs/workbench/services/remote/common/remoteAgentService";
+import { PersistentConnectionEventType } from "vs/platform/remote/common/remoteAgentConnection";
 
 class TelemetryService extends TelemetryChannelClient {
 	public constructor(
@@ -34,15 +32,23 @@ class NodeProxyService extends NodeProxyChannelClient implements INodeProxyServi
 	public constructor(
 		@IRemoteAgentService remoteAgentService: IRemoteAgentService,
 	) {
-		// TODO: up/down/close
 		super(remoteAgentService.getConnection()!.getChannel("nodeProxy"));
+		remoteAgentService.getConnection()!.onDidStateChange((state) => {
+			switch (state.type) {
+				case PersistentConnectionEventType.ConnectionGain:
+					return this._onUp.fire();
+				case PersistentConnectionEventType.ConnectionLost:
+					return this._onDown.fire();
+				case PersistentConnectionEventType.ReconnectionPermanentFailure:
+					return this._onClose.fire();
+			}
+		});
 	}
 }
 
 registerSingleton(ILocalizationsService, LocalizationsService);
 registerSingleton(INodeProxyService, NodeProxyService);
 registerSingleton(ITelemetryService, TelemetryService);
-registerSingleton(IUpdateService, UpdateService);
 registerSingleton(IUploadService, UploadService, true);
 
 /**
